@@ -1,5 +1,7 @@
+import { Category, CategoryInfo, CategorizedTabs, GroupTabsMessage, GroupTabsResponse } from './types';
+
 // Tab categorization rules
-const CATEGORIES = {
+const CATEGORIES: Record<string, Category> = {
   docs: {
     name: 'Docs',
     patterns: [
@@ -83,31 +85,56 @@ const CATEGORIES = {
 };
 
 // Categorize a URL
-function categorizeUrl(url) {
+function categorizeUrl(url: string): CategoryInfo | null {
   try {
     const urlObj = new URL(url);
-    const hostname = urlObj.hostname.toLowerCase();
+    let hostname = urlObj.hostname.toLowerCase();
+    const pathname = urlObj.pathname.toLowerCase();
+    
+    // Remove www. prefix for matching
+    if (hostname.startsWith('www.')) {
+      hostname = hostname.substring(4);
+    }
     
     for (const [categoryKey, category] of Object.entries(CATEGORIES)) {
       for (const pattern of category.patterns) {
-        if (hostname.includes(pattern)) {
-          return {
-            key: categoryKey,
-            name: category.name,
-            color: category.color
-          };
+        // Check if pattern is in pathname (for patterns like 'yahoo.com/search')
+        if (pattern.includes('/')) {
+          const [domain, path] = pattern.split('/');
+          let checkHostname = domain;
+          if (checkHostname.startsWith('www.')) {
+            checkHostname = checkHostname.substring(4);
+          }
+          if (hostname.includes(checkHostname) && pathname.includes(path)) {
+            return {
+              key: categoryKey,
+              name: category.name,
+              color: category.color
+            };
+          }
+        } else {
+          // For domain patterns, use includes() but rely on category order
+          // More specific patterns (like docs.google.com) are in categories checked first
+          if (hostname.includes(pattern)) {
+            return {
+              key: categoryKey,
+              name: category.name,
+              color: category.color
+            };
+          }
         }
       }
     }
     
     return null; // No category found
   } catch (e) {
+    console.error('Error categorizing URL:', url, e);
     return null;
   }
 }
 
 // Group tabs by category
-async function groupTabs() {
+async function groupTabs(): Promise<void> {
   try {
     console.log('Starting tab grouping...');
     
@@ -116,7 +143,7 @@ async function groupTabs() {
     console.log(`Found ${tabs.length} tabs`);
     
     // Categorize tabs
-    const categorizedTabs = {};
+    const categorizedTabs: CategorizedTabs = {};
     
     for (const tab of tabs) {
       // Skip chrome:// and extension pages
@@ -125,7 +152,7 @@ async function groupTabs() {
       }
       
       const category = categorizeUrl(tab.url);
-      if (category) {
+      if (category && tab.id !== undefined) {
         console.log(`Tab ${tab.id} (${tab.url}) → ${category.name}`);
         if (!categorizedTabs[category.key]) {
           categorizedTabs[category.key] = {
@@ -134,7 +161,7 @@ async function groupTabs() {
           };
         }
         categorizedTabs[category.key].tabIds.push(tab.id);
-      } else {
+      } else if (tab.id !== undefined) {
         console.log(`Tab ${tab.id} (${tab.url}) → No category`);
       }
     }
@@ -143,9 +170,11 @@ async function groupTabs() {
     
     // Get existing groups
     const existingGroups = await chrome.tabGroups.query({});
-    const groupsByTitle = {};
+    const groupsByTitle: Record<string, number> = {};
     for (const group of existingGroups) {
-      groupsByTitle[group.title] = group.id;
+      if (group.title) {
+        groupsByTitle[group.title] = group.id;
+      }
     }
     
     // Create groups for each category
@@ -153,12 +182,12 @@ async function groupTabs() {
       // Chrome requires at least 2 tabs to create a group
       if (data.tabIds.length > 1) {
         // Filter out tabs that are already in the correct group
-        const tabsToGroup = [];
+        const tabsToGroup: number[] = [];
         for (const tabId of data.tabIds) {
           const tab = await chrome.tabs.get(tabId);
           const existingGroupId = tab.groupId;
           
-          if (existingGroupId === -1) {
+          if (existingGroupId === -1 || existingGroupId === undefined) {
             // Tab is not in any group
             tabsToGroup.push(tabId);
           } else {
@@ -174,9 +203,9 @@ async function groupTabs() {
         }
         
         if (tabsToGroup.length > 0) {
-          let groupId = groupsByTitle[data.category.name];
+          const groupId = groupsByTitle[data.category.name];
           
-          if (groupId) {
+          if (groupId !== undefined) {
             // Add tabs to existing group
             console.log(`Adding ${tabsToGroup.length} tabs to existing group: ${data.category.name}`);
             await chrome.tabs.group({
@@ -202,12 +231,14 @@ async function groupTabs() {
     console.log('Tabs grouped successfully');
   } catch (error) {
     console.error('Error grouping tabs:', error);
-    console.error('Stack:', error.stack);
+    if (error instanceof Error) {
+      console.error('Stack:', error.stack);
+    }
   }
 }
 
 // Listen for tab updates
-chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+chrome.tabs.onUpdated.addListener(async (tabId: number, changeInfo: chrome.tabs.TabChangeInfo, tab: chrome.tabs.Tab) => {
   if (changeInfo.status === 'complete' && tab.url) {
     // Small delay to ensure tab is fully loaded
     setTimeout(() => {
@@ -217,7 +248,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
 });
 
 // Listen for new tabs
-chrome.tabs.onCreated.addListener(async (tab) => {
+chrome.tabs.onCreated.addListener(async (tab: chrome.tabs.Tab) => {
   setTimeout(() => {
     groupTabs();
   }, 500);
@@ -241,11 +272,11 @@ chrome.runtime.onInstalled.addListener(() => {
 groupTabs();
 
 // Handle messages from popup
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((request: GroupTabsMessage, sender: chrome.runtime.MessageSender, sendResponse: (response: GroupTabsResponse) => void) => {
   if (request.action === 'groupTabs') {
     groupTabs().then(() => {
       sendResponse({ success: true });
-    }).catch((error) => {
+    }).catch((error: Error) => {
       sendResponse({ success: false, error: error.message });
     });
     return true; // Keep the message channel open for async response

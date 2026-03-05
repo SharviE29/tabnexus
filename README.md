@@ -65,8 +65,31 @@ yourCategory: {
 
 ## Development
 
-The extension uses Chrome Extension Manifest V3 and consists of:
+The extension uses Chrome Extension Manifest V3 and TypeScript. The project structure:
+
 - `manifest.json`: Extension configuration
-- `background.js`: Service worker that handles tab grouping logic
-- `popup.html` & `popup.js`: User interface for manual controls
+- `src/background.ts`: Service worker that handles tab grouping logic (TypeScript)
+- `src/popup.ts`: Popup UI logic (TypeScript)
+- `src/types.ts`: TypeScript type definitions
+- `popup.html`: Popup UI markup
+- `dist/`: Compiled JavaScript files (generated)
+
+### Building
+
+1. Install dependencies:
+   ```bash
+   npm install
+   ```
+
+2. Build TypeScript:
+   ```bash
+   npm run build
+   ```
+
+3. Watch mode (auto-rebuild on changes):
+   ```bash
+   npm run watch
+   ```
+
+After building, load the `dist/` folder (or the project root) in Chrome as an unpacked extension.
 
