@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "TabNexus",
+  "version": "1.0.0",
+  "description": "Auto Tab Grouper - Automatically groups tabs by category (Docs, Social Media, Shopping, etc.)",
+  "permissions": [
+    "tabs",
+    "tabGroups"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html"
+  }
+}
